@@ -169,7 +169,7 @@ router.post("/:id/send-image", upload.single("image"), async (req, res) => {
     const result = await sendImage(contact.wa_id, mediaId, caption);
     const wamid = result.messages?.[0]?.id ?? `img_${Date.now()}`;
     const ts = Date.now();
-    const media_url = `/uploads/outbound/${req.file.filename}`;
+    const media_url = `/api/uploads/outbound/${req.file.filename}`;
 
     const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "image", body: caption || "📷 Image", status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url });
     convQ.touch.run(ts, conv.id);

@@ -106,8 +106,8 @@ export default function Inbox() {
     try {
       const msg = await sendImage(active.id, file, caption);
       if (msg?.wamid) sentWamids.current.add(msg.wamid);
-      URL.revokeObjectURL(preview);
       setMessages((p) => p.map((m) => m.id === opt.id ? { ...m, ...msg } : m));
+      URL.revokeObjectURL(preview);
     } catch (err) {
       toast.error(err.response?.data?.error ?? "Image send failed");
       URL.revokeObjectURL(preview);

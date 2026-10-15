@@ -33,8 +33,8 @@ app.use(express.json({
   verify: (req, _res, buf) => { req.rawBody = buf; },
 }));
 
-// Serve uploaded outbound images
-app.use("/uploads", express.static(uploadsBase));
+// Serve uploaded outbound images — under /api so nginx proxies it
+app.use("/api/uploads", express.static(uploadsBase));
 
 // Proxy inbound WhatsApp media — cache to disk after first fetch
 app.get("/api/media/:mediaId", async (req, res) => {
