@@ -1,7 +1,25 @@
 const router = require("express").Router();
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
 const { convQ, msgQ, contactQ, cannedQ, tagQ } = require("../db");
-const { sendText, sendTemplate, markAsRead } = require("../whatsapp");
+const { sendText, sendTemplate, uploadMedia, sendImage, markAsRead } = require("../whatsapp");
 const { requireAuth } = require("../middleware/auth");
+
+const uploadsDir = path.join(__dirname, "../../uploads/outbound");
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadsDir,
+    filename: (_req, file, cb) => cb(null, `${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`),
+  }),
+  limits: { fileSize: 16 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Images only"));
+  },
+});
 
 router.use(requireAuth);
 
@@ -33,7 +51,7 @@ router.post("/new", async (req, res) => {
       body = message.trim();
     }
 
-    msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: template_name ? "template" : "text", body, status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null });
+    msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: template_name ? "template" : "text", body, status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url: null });
     convQ.touch.run(ts, conv.id);
 
     const message_obj = { wamid, conversation_id: conv.id, direction: "outbound", type: template_name ? "template" : "text", body, status: "sent", is_note: 0, sender_id: req.agent.id, sender_name: req.agent.name, timestamp: ts };
@@ -89,7 +107,7 @@ router.post("/:id/send", async (req, res) => {
     const wamid = result.messages?.[0]?.id ?? `local_${Date.now()}`;
     const ts = Date.now();
 
-    const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "text", body: text.trim(), status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: reply_to_wamid ?? null });
+    const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "text", body: text.trim(), status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: reply_to_wamid ?? null, media_url: null });
     convQ.touch.run(ts, conv.id);
 
     // Fetch reply context to include in response
@@ -121,7 +139,7 @@ router.post("/:id/send-template", async (req, res) => {
     const ts = Date.now();
     const body = `[Template: ${template_name}]`;
 
-    const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "template", body, status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null });
+    const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "template", body, status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url: null });
     convQ.touch.run(ts, conv.id);
 
     const message = { id: info.lastInsertRowid, wamid, conversation_id: conv.id, direction: "outbound", type: "template", body, status: "sent", is_note: 0, sender_id: req.agent.id, sender_name: req.agent.name, timestamp: ts };
@@ -133,6 +151,40 @@ router.post("/:id/send-template", async (req, res) => {
   }
 });
 
+// ── Send image ────────────────────────────────────────────────────────────────
+router.post("/:id/send-image", upload.single("image"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "image required" });
+
+  const conv = convQ.byId.get(req.params.id);
+  if (!conv) return res.status(404).json({ error: "Not found" });
+
+  const contact = contactQ.byId.get(conv.contact_wa_id);
+  if (contact.blacklisted) return res.status(403).json({ error: "Contact is blacklisted" });
+
+  try {
+    const buffer = fs.readFileSync(req.file.path);
+    const { id: mediaId } = await uploadMedia(buffer, req.file.mimetype, req.file.filename);
+
+    const caption = req.body.caption?.trim() ?? "";
+    const result = await sendImage(contact.wa_id, mediaId, caption);
+    const wamid = result.messages?.[0]?.id ?? `img_${Date.now()}`;
+    const ts = Date.now();
+    const media_url = `/uploads/outbound/${req.file.filename}`;
+
+    const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "image", body: caption || "📷 Image", status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url });
+    convQ.touch.run(ts, conv.id);
+
+    const message = { id: info.lastInsertRowid, wamid, conversation_id: conv.id, direction: "outbound", type: "image", body: caption || "📷 Image", status: "sent", is_note: 0, sender_id: req.agent.id, sender_name: req.agent.name, timestamp: ts, media_url };
+    req.app.get("io")?.emit("new_message", { conversation_id: conv.id, contact_wa_id: contact.wa_id, message });
+
+    res.json(message);
+  } catch (err) {
+    fs.unlink(req.file.path, () => {});
+    console.error("[send-image]", err.response?.data ?? err.message);
+    res.status(500).json({ error: err.response?.data?.error?.message ?? "Image send failed" });
+  }
+});
+
 // ── Internal note ─────────────────────────────────────────────────────────────
 router.post("/:id/note", (req, res) => {
   const { text } = req.body;
@@ -141,7 +193,7 @@ router.post("/:id/note", (req, res) => {
   if (!conv) return res.status(404).json({ error: "Not found" });
 
   const ts = Date.now();
-  const info = msgQ.insert.run({ wamid: `note_${ts}`, conversation_id: conv.id, direction: "outbound", type: "text", body: text.trim(), status: "sent", is_note: 1, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null });
+  const info = msgQ.insert.run({ wamid: `note_${ts}`, conversation_id: conv.id, direction: "outbound", type: "text", body: text.trim(), status: "sent", is_note: 1, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url: null });
 
   const message = { id: info.lastInsertRowid, wamid: `note_${ts}`, conversation_id: conv.id, direction: "outbound", type: "text", body: text.trim(), status: "sent", is_note: 1, sender_id: req.agent.id, sender_name: req.agent.name, timestamp: ts };
   req.app.get("io")?.emit("new_message", { conversation_id: conv.id, contact_wa_id: conv.contact_wa_id, message });

@@ -15,7 +15,7 @@ function startJobs(io) {
         // Ensure conversation exists
         const conv = convQ.getOrCreate(item.contact_wa_id);
         if (conv) {
-          msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "text", body: item.body, status: "sent", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null });
+          msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "text", body: item.body, status: "sent", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null, media_url: null });
           convQ.touch.run(ts, conv.id);
           io?.emit("new_message", { conversation_id: conv.id, contact_wa_id: item.contact_wa_id, message: { wamid, conversation_id: conv.id, direction: "outbound", type: "text", body: item.body, status: "sent", is_note: 0, timestamp: ts } });
         }

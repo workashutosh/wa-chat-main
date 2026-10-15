@@ -13,7 +13,7 @@ import { SendBar } from "../components/SendBar";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { cn, formatTime } from "../lib/utils";
-import { getConversations, getMessages, sendMessage, addNote, assignConversation, setConversationStatus, getAgents, getTemplates, sendTemplate as apiSendTemplate, startNewChat } from "../lib/api";
+import { getConversations, getMessages, sendMessage, sendImage, addNote, assignConversation, setConversationStatus, getAgents, getTemplates, sendTemplate as apiSendTemplate, startNewChat } from "../lib/api";
 
 export default function Inbox() {
   const { agent } = useAuth();
@@ -94,6 +94,23 @@ export default function Inbox() {
       setMessages((p) => p.map((m) => m.id === opt.id ? { ...m, ...msg } : m));
     } catch (err) {
       toast.error(err.response?.data?.error ?? "Send failed");
+      setMessages((p) => p.filter((m) => m.id !== opt.id));
+    } finally { setSending(false); }
+  }
+
+  async function handleSendImage(file, caption) {
+    setSending(true);
+    const preview = URL.createObjectURL(file);
+    const opt = { id: `opt_${Date.now()}`, wamid: `opt_${Date.now()}`, conversation_id: active.id, direction: "outbound", type: "image", body: caption || "📷 Image", status: "sent", is_note: 0, sender_id: agent.id, sender_name: agent.name, timestamp: Date.now(), media_url: preview };
+    setMessages((p) => [...p, opt]);
+    try {
+      const msg = await sendImage(active.id, file, caption);
+      if (msg?.wamid) sentWamids.current.add(msg.wamid);
+      URL.revokeObjectURL(preview);
+      setMessages((p) => p.map((m) => m.id === opt.id ? { ...m, ...msg } : m));
+    } catch (err) {
+      toast.error(err.response?.data?.error ?? "Image send failed");
+      URL.revokeObjectURL(preview);
       setMessages((p) => p.filter((m) => m.id !== opt.id));
     } finally { setSending(false); }
   }
@@ -243,6 +260,7 @@ export default function Inbox() {
           <SendBar
             onSend={handleSend}
             onNote={handleNote}
+            onSendImage={handleSendImage}
             onTemplate={() => { getTemplates().then(setTemplates); setShowTemplate(true); }}
             disabled={sending}
             replyTo={replyTo}

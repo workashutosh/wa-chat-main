@@ -1,34 +1,57 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, StickyNote, Zap, X } from "lucide-react";
+import { Send, StickyNote, Zap, X, ImagePlus } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { cn } from "../lib/utils";
 import { getCannedResponses } from "../lib/api";
 
-export function SendBar({ onSend, onNote, onTemplate, disabled, replyTo, onClearReply }) {
+export function SendBar({ onSend, onNote, onTemplate, onSendImage, disabled, replyTo, onClearReply }) {
   const [text, setText] = useState("");
-  const [mode, setMode] = useState("message"); // "message" | "note"
+  const [mode, setMode] = useState("message");
   const [canned, setCanned] = useState([]);
   const [showCanned, setShowCanned] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const textRef = useRef(null);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     getCannedResponses().then(setCanned).catch(() => {});
   }, []);
 
-  // Trigger canned when user types "/"
   useEffect(() => {
     if (text === "/") setShowCanned(true);
     else if (!text.startsWith("/")) setShowCanned(false);
-    else {
-      const q = text.slice(1).toLowerCase();
-      setShowCanned(q.length >= 0);
-    }
+    else setShowCanned(true);
   }, [text]);
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  function clearImage() {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   function handleSubmit(e) {
     e?.preventDefault();
-    if (!text.trim() || disabled) return;
+    if (disabled) return;
+    if (imageFile) {
+      onSendImage?.(imageFile, text.trim());
+      clearImage();
+      setText("");
+      setShowCanned(false);
+      onClearReply?.();
+      return;
+    }
+    if (!text.trim()) return;
     if (mode === "note") onNote?.(text.trim());
     else onSend?.(text.trim());
     setText("");
@@ -66,6 +89,20 @@ export function SendBar({ onSend, onNote, onTemplate, disabled, replyTo, onClear
           </button>
         </div>
       )}
+
+      {/* Image preview */}
+      {imagePreview && (
+        <div className="mx-4 mt-2 relative inline-flex">
+          <img src={imagePreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-border" />
+          <button
+            onClick={clearImage}
+            className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center shadow"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       {/* Mode tabs */}
       <div className="flex gap-1 px-4 pt-2">
         <button onClick={() => setMode("message")} className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors", mode === "message" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
@@ -96,7 +133,13 @@ export function SendBar({ onSend, onNote, onTemplate, disabled, replyTo, onClear
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={mode === "note" ? "Add internal note… (visible to team only)" : "Type a message… (/ for canned responses)"}
+            placeholder={
+              imageFile
+                ? "Add a caption… (optional)"
+                : mode === "note"
+                ? "Add internal note… (visible to team only)"
+                : "Type a message… (/ for canned responses)"
+            }
             disabled={disabled}
             className={cn("pr-2", mode === "note" && "border-amber-300 focus-visible:ring-amber-400")}
             rows={1}
@@ -104,12 +147,38 @@ export function SendBar({ onSend, onNote, onTemplate, disabled, replyTo, onClear
           />
         </div>
         <div className="flex gap-1">
-          {onTemplate && (
+          {/* Hidden file input */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          {/* Image attach button — only in message mode */}
+          {mode === "message" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => fileRef.current?.click()}
+              title="Attach image"
+              className={imageFile ? "border-primary text-primary" : ""}
+            >
+              <ImagePlus className="w-4 h-4" />
+            </Button>
+          )}
+          {onTemplate && !imageFile && (
             <Button type="button" variant="outline" size="icon" onClick={onTemplate} title="Send template">
               <Zap className="w-4 h-4" />
             </Button>
           )}
-          <Button type="submit" size="icon" disabled={!text.trim() || disabled} className={mode === "note" ? "bg-amber-400 hover:bg-amber-500" : ""}>
+          <Button
+            type="submit"
+            size="icon"
+            disabled={(!text.trim() && !imageFile) || disabled}
+            className={mode === "note" ? "bg-amber-400 hover:bg-amber-500" : ""}
+          >
             <Send className="w-4 h-4" />
           </Button>
         </div>

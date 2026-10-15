@@ -73,7 +73,8 @@ db.exec(`
     is_note         INTEGER NOT NULL DEFAULT 0,
     sender_id       INTEGER REFERENCES agents(id),
     timestamp       INTEGER NOT NULL,
-    reply_to_wamid  TEXT
+    reply_to_wamid  TEXT,
+    media_url       TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
 
@@ -236,14 +237,15 @@ const convQ = {
   clearUnread: db.prepare("UPDATE conversations SET unread_count=0 WHERE id=?"),
 };
 
-// Add reply_to_wamid column to existing DBs that pre-date it
+// Migrate existing DBs that pre-date these columns
 try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_wamid TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
 
 // Messages
 const msgQ = {
   insert: db.prepare(`
-    INSERT OR IGNORE INTO messages (wamid,conversation_id,direction,type,body,status,is_note,sender_id,timestamp,reply_to_wamid)
-    VALUES (@wamid,@conversation_id,@direction,@type,@body,@status,@is_note,@sender_id,@timestamp,@reply_to_wamid)
+    INSERT OR IGNORE INTO messages (wamid,conversation_id,direction,type,body,status,is_note,sender_id,timestamp,reply_to_wamid,media_url)
+    VALUES (@wamid,@conversation_id,@direction,@type,@body,@status,@is_note,@sender_id,@timestamp,@reply_to_wamid,@media_url)
   `),
   list: db.prepare(`
     SELECT m.*, a.name as sender_name,

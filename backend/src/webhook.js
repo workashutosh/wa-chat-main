@@ -48,11 +48,12 @@ function processChange(value, io) {
       convQ.touch.run(ts, conv.id);
       convQ.incrUnread.run(conv.id);
 
-      const info = msgQ.insert.run({ wamid: msg.id, conversation_id: conv.id, direction: "inbound", type: msg.type, body, status: "received", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null });
+      const media_url = extractMediaId(msg);
+      const info = msgQ.insert.run({ wamid: msg.id, conversation_id: conv.id, direction: "inbound", type: msg.type, body, status: "received", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null, media_url });
 
       markAsRead(msg.id);
 
-      const message = { id: info.lastInsertRowid, wamid: msg.id, conversation_id: conv.id, direction: "inbound", type: msg.type, body, status: "received", is_note: 0, sender_id: null, timestamp: ts };
+      const message = { id: info.lastInsertRowid, wamid: msg.id, conversation_id: conv.id, direction: "inbound", type: msg.type, body, status: "received", is_note: 0, sender_id: null, timestamp: ts, media_url };
       io?.emit("new_message", { conversation_id: conv.id, contact_wa_id: wa_id, contact_name: name, message });
 
       // Run automation rules
@@ -81,7 +82,7 @@ function runAutomation(wa_id, body, conv_id, io) {
         sendText(wa_id, action.text).then((result) => {
           const wamid = result.messages?.[0]?.id ?? `auto_${Date.now()}`;
           const ts = Date.now();
-          const info = msgQ.insert.run({ wamid, conversation_id: conv_id, direction: "outbound", type: "text", body: action.text, status: "sent", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null });
+          const info = msgQ.insert.run({ wamid, conversation_id: conv_id, direction: "outbound", type: "text", body: action.text, status: "sent", is_note: 0, sender_id: null, timestamp: ts, reply_to_wamid: null, media_url: null });
           io?.emit("new_message", { conversation_id: conv_id, contact_wa_id: wa_id, message: { id: info.lastInsertRowid, wamid, conversation_id: conv_id, direction: "outbound", type: "text", body: action.text, status: "sent", is_note: 0, sender_id: null, timestamp: ts } });
         }).catch(console.error);
       }
@@ -95,6 +96,17 @@ function runAutomation(wa_id, body, conv_id, io) {
       }
     }
     break; // first matching rule wins
+  }
+}
+
+function extractMediaId(msg) {
+  switch (msg.type) {
+    case "image":    return msg.image?.id ?? null;
+    case "video":    return msg.video?.id ?? null;
+    case "audio":    return msg.audio?.id ?? null;
+    case "document": return msg.document?.id ?? null;
+    case "sticker":  return msg.sticker?.id ?? null;
+    default:         return null;
   }
 }
 

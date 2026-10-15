@@ -18,6 +18,12 @@ export const startNewChat = (data) => api.post("/api/conversations/new", data).t
 export const getConversation = (id) => api.get(`/api/conversations/${id}`).then((r) => r.data);
 export const getMessages = (id) => api.get(`/api/conversations/${id}/messages`).then((r) => r.data);
 export const sendMessage = (id, text, reply_to_wamid) => api.post(`/api/conversations/${id}/send`, { text, reply_to_wamid }).then((r) => r.data);
+export const sendImage = (id, file, caption = "") => {
+  const fd = new FormData();
+  fd.append("image", file);
+  if (caption) fd.append("caption", caption);
+  return api.post(`/api/conversations/${id}/send-image`, fd).then((r) => r.data);
+};
 export const sendTemplate = (id, data) => api.post(`/api/conversations/${id}/send-template`, data).then((r) => r.data);
 export const addNote = (id, text) => api.post(`/api/conversations/${id}/note`, { text }).then((r) => r.data);
 export const assignConversation = (id, agent_id) => api.post(`/api/conversations/${id}/assign`, { agent_id }).then((r) => r.data);

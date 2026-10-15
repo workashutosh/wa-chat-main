@@ -1,4 +1,5 @@
 const axios = require("axios");
+const FormData = require("form-data");
 
 const BASE = "https://graph.facebook.com/v21.0";
 
@@ -47,4 +48,37 @@ async function fetchTemplates() {
   return data.data ?? [];
 }
 
-module.exports = { sendText, sendTemplate, markAsRead, fetchTemplates };
+async function uploadMedia(buffer, mimeType, filename) {
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("file", buffer, { filename, contentType: mimeType });
+  const { data } = await client().post(`/${process.env.PHONE_NUMBER_ID}/media`, form, {
+    headers: form.getHeaders(),
+  });
+  return data; // { id: "...", ... }
+}
+
+async function sendImage(to, mediaId, caption = "") {
+  const { data } = await client().post(`/${process.env.PHONE_NUMBER_ID}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "image",
+    image: { id: mediaId, caption },
+  });
+  return data;
+}
+
+async function getMediaInfo(mediaId) {
+  const { data } = await client().get(`/${mediaId}`);
+  return { url: data.url, mimeType: data.mime_type };
+}
+
+async function downloadMedia(mediaUrl) {
+  const { data, headers } = await axios.get(mediaUrl, {
+    headers: { Authorization: `Bearer ${process.env.ACCESS_TOKEN}` },
+    responseType: "arraybuffer",
+  });
+  return { buffer: Buffer.from(data), mimeType: headers["content-type"] };
+}
+
+module.exports = { sendText, sendTemplate, markAsRead, fetchTemplates, uploadMedia, sendImage, getMediaInfo, downloadMedia };
