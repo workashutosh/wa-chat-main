@@ -155,7 +155,6 @@ if (!adminExists) {
 try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_wamid TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN phone TEXT"); } catch (_) {}
-try { db.exec("ALTER TABLE agents ADD COLUMN country TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'agent'"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN permissions TEXT DEFAULT '{}'"); } catch (_) {}
 
@@ -164,10 +163,10 @@ try { db.exec("ALTER TABLE agents ADD COLUMN permissions TEXT DEFAULT '{}'"); } 
 // Agents
 const agentQ = {
   byEmail:  db.prepare("SELECT * FROM agents WHERE email = ?"),
-  byId:     db.prepare("SELECT id,name,email,role,avatar,is_active,phone,country,agent_type,permissions,created_at FROM agents WHERE id = ?"),
-  list:     db.prepare("SELECT id,name,email,role,is_active,phone,country,agent_type,permissions,created_at FROM agents"),
-  insert:   db.prepare("INSERT INTO agents (name,email,password,role,phone,country,agent_type,permissions) VALUES (@name,@email,@password,@role,@phone,@country,@agent_type,@permissions)"),
-  update:   db.prepare("UPDATE agents SET name=@name,role=@role,is_active=@is_active,phone=@phone,country=@country,agent_type=@agent_type,permissions=@permissions WHERE id=@id"),
+  byId:     db.prepare("SELECT id,name,email,role,avatar,is_active,phone,agent_type,permissions,created_at FROM agents WHERE id = ?"),
+  list:     db.prepare("SELECT id,name,email,role,is_active,phone,agent_type,permissions,created_at FROM agents"),
+  insert:   db.prepare("INSERT INTO agents (name,email,password,role,phone,agent_type,permissions) VALUES (@name,@email,@password,@role,@phone,@agent_type,@permissions)"),
+  update:   db.prepare("UPDATE agents SET name=@name,role=@role,is_active=@is_active,phone=@phone,agent_type=@agent_type,permissions=@permissions WHERE id=@id"),
   updatePassword: db.prepare("UPDATE agents SET password=? WHERE id=?"),
 };
 

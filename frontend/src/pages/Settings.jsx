@@ -78,17 +78,6 @@ const TYPE_DEFAULTS = {
   },
 };
 
-const COUNTRIES = [
-  "Afghanistan","Albania","Algeria","Argentina","Australia","Austria","Bangladesh","Belgium",
-  "Brazil","Canada","Chile","China","Colombia","Denmark","Egypt","Ethiopia","Finland",
-  "France","Germany","Ghana","Greece","Hungary","India","Indonesia","Iran","Iraq","Ireland",
-  "Israel","Italy","Japan","Jordan","Kenya","Malaysia","Mexico","Morocco","Myanmar",
-  "Netherlands","New Zealand","Nigeria","Norway","Pakistan","Peru","Philippines","Poland",
-  "Portugal","Romania","Russia","Saudi Arabia","Singapore","South Africa","South Korea",
-  "Spain","Sri Lanka","Sweden","Switzerland","Thailand","Turkey","UAE","Uganda","UK",
-  "Ukraine","USA","Venezuela","Vietnam","Zimbabwe",
-];
-
 const AGENT_TYPES = [
   { value: "admin", label: "Admin", icon: Shield, desc: "Full system access" },
   { value: "manager", label: "Manager", icon: UserCheck, desc: "Manage team & conversations" },
@@ -165,13 +154,6 @@ function AgentForm({ initial, onSave, onCancel, isEdit }) {
         <div>
           <label className="text-sm font-medium text-foreground block mb-1.5">Email <span className="text-red-500">*</span></label>
           <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="john@company.com" disabled={isEdit} />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-foreground block mb-1.5">Country</label>
-          <Select value={form.country ?? ""} onChange={(e) => set("country", e.target.value)}>
-            <option value="">Select country…</option>
-            {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </Select>
         </div>
         <div>
           <label className="text-sm font-medium text-foreground block mb-1.5">Phone</label>
@@ -303,7 +285,7 @@ export default function Settings() {
   const [editingCanned, setEditingCanned] = useState(null);
   const [cannedForm, setCannedForm] = useState({ shortcut: "", title: "", body: "" });
 
-  const BLANK_AGENT = { name: "", email: "", password: "", country: "", phone: "", agent_type: "agent", permissions: defaultPermsFor("agent"), is_active: true };
+  const BLANK_AGENT = { name: "", email: "", password: "", phone: "", agent_type: "agent", permissions: defaultPermsFor("agent"), is_active: true };
 
   function load() {
     getAgents().then(setAgents).catch(console.error);
@@ -336,7 +318,7 @@ export default function Settings() {
 
   async function handleToggleActive(a) {
     try {
-      await updateAgent(a.id, { name: a.name, role: a.role, is_active: !a.is_active, phone: a.phone, country: a.country, agent_type: a.agent_type ?? "agent", permissions: a.permissions ?? "{}" });
+      await updateAgent(a.id, { name: a.name, role: a.role, is_active: !a.is_active, phone: a.phone, agent_type: a.agent_type ?? "agent", permissions: a.permissions ?? "{}" });
       load();
       toast.success(a.is_active ? "Agent deactivated" : "Agent activated");
     } catch { toast.error("Failed"); }
@@ -410,11 +392,7 @@ export default function Settings() {
                         {a.id === agent?.id && <span className="text-xs text-muted-foreground">(you)</span>}
                       </div>
                       <p className="text-xs text-muted-foreground">{a.email}</p>
-                      {(a.phone || a.country) && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {[a.country, a.phone].filter(Boolean).join(" · ")}
-                        </p>
-                      )}
+                      {a.phone && <p className="text-xs text-muted-foreground mt-0.5">{a.phone}</p>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium capitalize ${typeColors[type] ?? "bg-slate-100 text-slate-600"}`}>{type}</span>
