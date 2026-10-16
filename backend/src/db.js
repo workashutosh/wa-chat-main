@@ -151,15 +151,24 @@ if (!adminExists) {
   console.log("[db] Seeded admin  →  admin@nexusbizsol.com / admin123");
 }
 
+// ── Migrations (run before preparing statements) ──────────────────────────────
+try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_wamid TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE agents ADD COLUMN phone TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE agents ADD COLUMN country TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'agent'"); } catch (_) {}
+try { db.exec("ALTER TABLE agents ADD COLUMN permissions TEXT DEFAULT '{}'"); } catch (_) {}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Agents
 const agentQ = {
   byEmail:  db.prepare("SELECT * FROM agents WHERE email = ?"),
-  byId:     db.prepare("SELECT id,name,email,role,avatar,is_active,created_at FROM agents WHERE id = ?"),
-  list:     db.prepare("SELECT id,name,email,role,is_active,created_at FROM agents"),
-  insert:   db.prepare("INSERT INTO agents (name,email,password,role) VALUES (@name,@email,@password,@role)"),
-  update:   db.prepare("UPDATE agents SET name=@name,role=@role,is_active=@is_active WHERE id=@id"),
+  byId:     db.prepare("SELECT id,name,email,role,avatar,is_active,phone,country,agent_type,permissions,created_at FROM agents WHERE id = ?"),
+  list:     db.prepare("SELECT id,name,email,role,is_active,phone,country,agent_type,permissions,created_at FROM agents"),
+  insert:   db.prepare("INSERT INTO agents (name,email,password,role,phone,country,agent_type,permissions) VALUES (@name,@email,@password,@role,@phone,@country,@agent_type,@permissions)"),
+  update:   db.prepare("UPDATE agents SET name=@name,role=@role,is_active=@is_active,phone=@phone,country=@country,agent_type=@agent_type,permissions=@permissions WHERE id=@id"),
+  updatePassword: db.prepare("UPDATE agents SET password=? WHERE id=?"),
 };
 
 // Contacts
@@ -236,10 +245,6 @@ const convQ = {
   incrUnread:  db.prepare("UPDATE conversations SET unread_count=unread_count+1 WHERE id=?"),
   clearUnread: db.prepare("UPDATE conversations SET unread_count=0 WHERE id=?"),
 };
-
-// Migrate existing DBs that pre-date these columns
-try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_wamid TEXT"); } catch (_) {}
-try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
 
 // Messages
 const msgQ = {
