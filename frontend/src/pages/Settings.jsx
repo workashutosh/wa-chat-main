@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Shield, UserCheck, User, Sliders, Eye, EyeOff, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, UserCheck, User, Sliders, Eye, EyeOff, ChevronDown, ChevronUp, Copy, CheckCheck, Phone, Webhook } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -8,7 +8,7 @@ import { Select } from "../components/ui/select";
 import { Avatar } from "../components/ui/avatar";
 import { Textarea } from "../components/ui/textarea";
 import { useAuth } from "../hooks/useAuth.jsx";
-import { getAgents, createAgent, updateAgent, getCannedResponses, createCannedResponse, updateCannedResponse, deleteCannedResponse } from "../lib/api";
+import api, { getAgents, createAgent, updateAgent, getCannedResponses, createCannedResponse, updateCannedResponse, deleteCannedResponse } from "../lib/api";
 
 // ── Permission groups ─────────────────────────────────────────────────────────
 const PERMISSION_GROUPS = [
@@ -274,11 +274,32 @@ function AgentForm({ initial, onSave, onCancel, isEdit }) {
 }
 
 // ── Main Settings page ────────────────────────────────────────────────────────
+function CopyField({ label, value, mono = true }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(value ?? "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>
+      <div className="flex items-center gap-2 bg-muted/50 border border-border rounded-lg px-3 py-2">
+        <span className={`flex-1 text-sm truncate ${mono ? "font-mono" : ""}`}>{value ?? <span className="text-muted-foreground italic">loading…</span>}</span>
+        <button onClick={copy} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+          {copied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { agent } = useAuth();
   const [tab, setTab] = useState("agents");
   const [agents, setAgents] = useState([]);
   const [canned, setCanned] = useState([]);
+  const [account, setAccount] = useState(null);
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [editingAgent, setEditingAgent] = useState(null);
   const [showCannedForm, setShowCannedForm] = useState(false);
@@ -292,6 +313,11 @@ export default function Settings() {
     getCannedResponses().then(setCanned).catch(console.error);
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (tab === "account" && !account) {
+      api.get("/api/settings/account").then((r) => setAccount(r.data)).catch(console.error);
+    }
+  }, [tab]);
 
   function openCreateAgent() { setEditingAgent(null); setShowAgentForm(true); }
   function openEditAgent(a) {
@@ -359,7 +385,7 @@ export default function Settings() {
         <h2 className="font-semibold text-lg">Settings</h2>
       </div>
       <div className="flex gap-1 px-6 py-3 border-b border-border">
-        {[["agents","Team Members"],["canned","Canned Responses"]].map(([v,l]) => (
+        {[["agents","Team Members"],["canned","Canned Responses"],["account","WhatsApp Account"]].map(([v,l]) => (
           <button key={v} onClick={() => setTab(v)} className={`text-sm px-4 py-1.5 rounded-md font-medium transition-colors ${tab===v?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-muted"}`}>{l}</button>
         ))}
       </div>
@@ -450,6 +476,61 @@ export default function Settings() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ── WhatsApp Account ── */}
+        {tab === "account" && (
+          <div className="max-w-xl space-y-6">
+            <div>
+              <h3 className="font-semibold text-base">WhatsApp Account</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">Active number and Meta integration details</p>
+            </div>
+
+            {/* Active number card */}
+            <div className="border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border-b border-border">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <Phone className="w-4 h-4 text-emerald-700 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-emerald-900">
+                    {account?.display_phone_number ?? "Loading…"}
+                  </p>
+                  {account?.verified_name && (
+                    <p className="text-xs text-emerald-700">{account.verified_name}</p>
+                  )}
+                </div>
+                {account?.quality_rating && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    account.quality_rating === "GREEN" ? "bg-emerald-100 text-emerald-700" :
+                    account.quality_rating === "YELLOW" ? "bg-amber-100 text-amber-700" :
+                    "bg-red-100 text-red-600"
+                  }`}>{account.quality_rating}</span>
+                )}
+              </div>
+              <div className="p-4 space-y-3">
+                <CopyField label="Phone Number ID" value={account?.phone_number_id} />
+                <CopyField label="WhatsApp Business Account ID (WABA)" value={account?.waba_id} />
+              </div>
+            </div>
+
+            {/* Webhook card */}
+            <div className="border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-muted/40 border-b border-border">
+                <Webhook className="w-4 h-4 text-muted-foreground shrink-0" />
+                <p className="text-sm font-semibold">Webhook Configuration</p>
+              </div>
+              <div className="p-4 space-y-3">
+                <CopyField label="Callback URL" value={account?.webhook_url} />
+                <CopyField label="Verify Token" value={account?.webhook_verify_token} />
+              </div>
+            </div>
+
+            {account?.error && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Could not fetch live data from Meta: {account.error}. IDs shown from config.
+              </p>
+            )}
           </div>
         )}
       </div>

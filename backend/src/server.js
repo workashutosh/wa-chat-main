@@ -14,6 +14,7 @@ const conversationsRouter = require("./routes/conversations");
 const templatesRouter = require("./routes/templates");
 const automationRouter = require("./routes/automation");
 const { getMediaInfo, downloadMedia } = require("./whatsapp");
+const axios = require("axios");
 const { startJobs } = require("./jobs");
 
 // Ensure upload dirs exist
@@ -67,6 +68,36 @@ app.use("/api/conversations", conversationsRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/automation",automationRouter);
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Account info — active WhatsApp number + webhook config
+app.get("/api/settings/account", async (_req, res) => {
+  try {
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}`,
+      { params: { fields: "display_phone_number,verified_name,quality_rating", access_token: process.env.ACCESS_TOKEN } }
+    );
+    res.json({
+      phone_number_id: process.env.PHONE_NUMBER_ID,
+      waba_id: process.env.WABA_ID,
+      display_phone_number: data.display_phone_number,
+      verified_name: data.verified_name,
+      quality_rating: data.quality_rating,
+      webhook_url: "https://webhook.nexusbizsol.com/webhook",
+      webhook_verify_token: process.env.WEBHOOK_VERIFY_TOKEN,
+    });
+  } catch (err) {
+    res.json({
+      phone_number_id: process.env.PHONE_NUMBER_ID,
+      waba_id: process.env.WABA_ID,
+      display_phone_number: null,
+      verified_name: null,
+      quality_rating: null,
+      webhook_url: "https://webhook.nexusbizsol.com/webhook",
+      webhook_verify_token: process.env.WEBHOOK_VERIFY_TOKEN,
+      error: err.response?.data?.error?.message ?? err.message,
+    });
+  }
+});
 
 io.on("connection", (socket) => {
   console.log("[socket] connected:", socket.id);
