@@ -68,10 +68,23 @@ router.post("/new", async (req, res) => {
 
 // ── List conversations ────────────────────────────────────────────────────────
 router.get("/", (req, res) => {
-  const { status, assigned } = req.query;
+  const { status, view } = req.query;
+  const canViewAll = req.agent.role === "admin" || req.agent.agent_type === "manager";
+
   let rows = convQ.list.all();
+
+  if (view === "mine") {
+    rows = rows.filter((r) => r.assigned_to === req.agent.id);
+  } else if (view === "unassigned") {
+    rows = rows.filter((r) => !r.assigned_to);
+  } else if (view === "all") {
+    if (!canViewAll) rows = rows.filter((r) => r.assigned_to === req.agent.id || !r.assigned_to);
+  } else {
+    // default: admins see all; agents see only mine + unassigned
+    if (!canViewAll) rows = rows.filter((r) => r.assigned_to === req.agent.id || !r.assigned_to);
+  }
+
   if (status) rows = rows.filter((r) => r.status === status);
-  if (assigned === "me") rows = rows.filter((r) => r.assigned_to === req.agent.id);
   res.json(rows);
 });
 
@@ -205,8 +218,19 @@ router.post("/:id/note", (req, res) => {
 router.post("/:id/assign", (req, res) => {
   const { agent_id } = req.body;
   convQ.assign.run(agent_id ?? null, req.params.id);
-  req.app.get("io")?.emit("conversation_updated", { id: parseInt(req.params.id), assigned_to: agent_id });
+  const { agentQ } = require("../db");
+  const assignedAgent = agent_id ? agentQ.byId.get(agent_id) : null;
+  req.app.get("io")?.emit("conversation_updated", { id: parseInt(req.params.id), assigned_to: agent_id ?? null, agent_name: assignedAgent?.name ?? null });
   res.json({ ok: true });
+});
+
+// ── Claim (self-assign) ───────────────────────────────────────────────────────
+router.post("/:id/claim", (req, res) => {
+  const conv = convQ.byId.get(req.params.id);
+  if (!conv) return res.status(404).json({ error: "Not found" });
+  convQ.assign.run(req.agent.id, req.params.id);
+  req.app.get("io")?.emit("conversation_updated", { id: parseInt(req.params.id), assigned_to: req.agent.id, agent_name: req.agent.name });
+  res.json({ ok: true, assigned_to: req.agent.id, agent_name: req.agent.name });
 });
 
 // ── Status ────────────────────────────────────────────────────────────────────

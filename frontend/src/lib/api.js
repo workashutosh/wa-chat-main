@@ -27,6 +27,7 @@ export const sendImage = (id, file, caption = "") => {
 export const sendTemplate = (id, data) => api.post(`/api/conversations/${id}/send-template`, data).then((r) => r.data);
 export const addNote = (id, text) => api.post(`/api/conversations/${id}/note`, { text }).then((r) => r.data);
 export const assignConversation = (id, agent_id) => api.post(`/api/conversations/${id}/assign`, { agent_id }).then((r) => r.data);
+export const claimConversation = (id) => api.post(`/api/conversations/${id}/claim`).then((r) => r.data);
 export const setConversationStatus = (id, status) => api.post(`/api/conversations/${id}/status`, { status }).then((r) => r.data);
 
 // Canned responses
