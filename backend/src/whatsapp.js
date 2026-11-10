@@ -81,4 +81,14 @@ async function downloadMedia(mediaUrl) {
   return { buffer: Buffer.from(data), mimeType: headers["content-type"] };
 }
 
-module.exports = { sendText, sendTemplate, markAsRead, fetchTemplates, uploadMedia, sendImage, getMediaInfo, downloadMedia };
+async function createTemplate(payload) {
+  const { data } = await client().post(`/${process.env.WABA_ID}/message_templates`, payload);
+  return data; // { id, status, category }
+}
+
+async function deleteTemplate(metaId) {
+  const { data } = await client().delete(`/${metaId}`);
+  return data;
+}
+
+module.exports = { sendText, sendTemplate, markAsRead, fetchTemplates, uploadMedia, sendImage, getMediaInfo, downloadMedia, createTemplate, deleteTemplate };

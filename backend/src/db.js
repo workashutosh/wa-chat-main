@@ -279,6 +279,7 @@ const templateQ = {
   list:        db.prepare("SELECT * FROM templates ORDER BY created_at DESC"),
   upsert:      db.prepare(`INSERT INTO templates (meta_id,name,language,category,status,components) VALUES (@meta_id,@name,@language,@category,@status,@components) ON CONFLICT(meta_id) DO UPDATE SET status=@status, components=@components`),
   byId:        db.prepare("SELECT * FROM templates WHERE id=?"),
+  delete:      db.prepare("DELETE FROM templates WHERE id=?"),
 };
 
 // Automation

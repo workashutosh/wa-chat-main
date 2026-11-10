@@ -49,6 +49,8 @@ export const createTag = (name, color) => api.post("/api/contacts/tags/all", { n
 // Templates
 export const getTemplates = () => api.get("/api/templates").then((r) => r.data);
 export const syncTemplates = () => api.post("/api/templates/sync").then((r) => r.data);
+export const createTemplate = (data) => api.post("/api/templates", data).then((r) => r.data);
+export const deleteTemplate = (id) => api.delete(`/api/templates/${id}`).then((r) => r.data);
 
 // Automation
 export const getRules = () => api.get("/api/automation/rules").then((r) => r.data);
