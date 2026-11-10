@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "../components/ui/button";
-import { getTemplates, syncTemplates, createTemplate, deleteTemplate } from "../lib/api";
+import { getTemplates, syncTemplates, createTemplate, deleteTemplate, setTemplateEnabled } from "../lib/api";
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -543,6 +543,18 @@ export default function Templates() {
     }
   }
 
+  async function handleToggleEnabled(tpl) {
+    const newVal = !tpl.enabled;
+    setTemplates((ts) => ts.map((t) => t.id === tpl.id ? { ...t, enabled: newVal } : t));
+    try {
+      await setTemplateEnabled(tpl.id, newVal);
+      toast.success(newVal ? "Template enabled for agents" : "Template hidden from agents");
+    } catch (err) {
+      setTemplates((ts) => ts.map((t) => t.id === tpl.id ? { ...t, enabled: !newVal } : t));
+      toast.error(err.response?.data?.error ?? "Update failed");
+    }
+  }
+
   const filtered = useMemo(() => {
     return templates.filter((t) => {
       if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
@@ -641,6 +653,7 @@ export default function Templates() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Language</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">API Payload</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Agents Can Use</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
@@ -662,6 +675,19 @@ export default function Templates() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">{tpl.language}</td>
                     <td className="px-4 py-3"><StatusBadge status={tpl.status} /></td>
                     <td className="px-4 py-3"><ApiPayloadButton template={tpl} /></td>
+                    <td className="px-4 py-3">
+                      {tpl.status === "APPROVED" ? (
+                        <button
+                          onClick={() => handleToggleEnabled(tpl)}
+                          title={tpl.enabled ? "Click to hide from agents" : "Click to show to agents"}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${tpl.enabled ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${tpl.enabled ? "translate-x-4" : "translate-x-1"}`} />
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button

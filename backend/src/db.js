@@ -157,6 +157,7 @@ try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN phone TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'agent'"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN permissions TEXT DEFAULT '{}'"); } catch (_) {}
+try { db.exec("ALTER TABLE templates ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -276,10 +277,11 @@ const cannedQ = {
 
 // Templates
 const templateQ = {
-  list:        db.prepare("SELECT * FROM templates ORDER BY created_at DESC"),
-  upsert:      db.prepare(`INSERT INTO templates (meta_id,name,language,category,status,components) VALUES (@meta_id,@name,@language,@category,@status,@components) ON CONFLICT(meta_id) DO UPDATE SET status=@status, components=@components`),
-  byId:        db.prepare("SELECT * FROM templates WHERE id=?"),
-  delete:      db.prepare("DELETE FROM templates WHERE id=?"),
+  list:       db.prepare("SELECT * FROM templates ORDER BY created_at DESC"),
+  upsert:     db.prepare(`INSERT INTO templates (meta_id,name,language,category,status,components) VALUES (@meta_id,@name,@language,@category,@status,@components) ON CONFLICT(meta_id) DO UPDATE SET status=@status, components=@components`),
+  byId:       db.prepare("SELECT * FROM templates WHERE id=?"),
+  delete:     db.prepare("DELETE FROM templates WHERE id=?"),
+  setEnabled: db.prepare("UPDATE templates SET enabled=? WHERE id=?"),
 };
 
 // Automation

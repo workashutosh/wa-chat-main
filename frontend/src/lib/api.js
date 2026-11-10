@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:3001" });
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:3001" });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("wa_token");
@@ -51,6 +51,7 @@ export const getTemplates = () => api.get("/api/templates").then((r) => r.data);
 export const syncTemplates = () => api.post("/api/templates/sync").then((r) => r.data);
 export const createTemplate = (data) => api.post("/api/templates", data).then((r) => r.data);
 export const deleteTemplate = (id) => api.delete(`/api/templates/${id}`).then((r) => r.data);
+export const setTemplateEnabled = (id, enabled) => api.patch(`/api/templates/${id}/enabled`, { enabled }).then((r) => r.data);
 
 // Automation
 export const getRules = () => api.get("/api/automation/rules").then((r) => r.data);

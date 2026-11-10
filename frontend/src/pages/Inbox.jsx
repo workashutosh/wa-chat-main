@@ -404,10 +404,10 @@ export default function Inbox() {
               <label className="text-xs font-medium text-muted-foreground">Template</label>
               <Select value={newChat.template_name} onChange={(e) => { const t = templates.find((t) => t.name === e.target.value); setNewChat((p) => ({ ...p, template_name: e.target.value, language: t?.language ?? p.language })); }} className="mt-1">
                 <option value="">Select a template…</option>
-                {templates.filter((t) => t.status === "APPROVED").map((t) => <option key={t.id} value={t.name}>{t.name} ({t.language})</option>)}
+                {templates.filter((t) => t.status === "APPROVED" && t.enabled).map((t) => <option key={t.id} value={t.name}>{t.name} ({t.language})</option>)}
               </Select>
-              {templates.filter((t) => t.status === "APPROVED").length === 0 && (
-                <p className="text-[11px] text-amber-600 mt-1">No approved templates found. Go to Templates → Sync from Meta first.</p>
+              {templates.filter((t) => t.status === "APPROVED" && t.enabled).length === 0 && (
+                <p className="text-[11px] text-amber-600 mt-1">No enabled templates. Admin must enable templates in the Templates page.</p>
               )}
             </div>
           )}
@@ -420,8 +420,8 @@ export default function Inbox() {
       {/* ── Template dialog ───────────────────────────────────────────────────── */}
       <Dialog open={showTemplate} onClose={() => setShowTemplate(false)} title="Send template">
         <div className="space-y-3">
-          {templates.filter((t) => t.status === "APPROVED").length === 0 && <p className="text-sm text-muted-foreground">No approved templates. Sync from Meta first.</p>}
-          {templates.filter((t) => t.status === "APPROVED").map((t) => (
+          {templates.filter((t) => t.status === "APPROVED" && t.enabled).length === 0 && <p className="text-sm text-muted-foreground">No enabled templates. Admin must enable templates from the Templates page.</p>}
+          {templates.filter((t) => t.status === "APPROVED" && t.enabled).map((t) => (
             <button key={t.id} onClick={() => setSelectedTemplate(t)} className={cn("w-full text-left px-3 py-2.5 rounded-lg border transition-colors", selectedTemplate?.id === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted")}>
               <p className="font-medium text-sm">{t.name}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{t.language} · {t.category}</p>

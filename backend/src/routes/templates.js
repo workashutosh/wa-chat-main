@@ -55,6 +55,16 @@ router.post("/", requireAdmin, async (req, res) => {
   }
 });
 
+// Toggle enabled (admin only, affects what agents see in chat)
+router.patch("/:id/enabled", requireAdmin, (req, res) => {
+  const template = templateQ.byId.get(req.params.id);
+  if (!template) return res.status(404).json({ error: "Not found" });
+  if (template.status !== "APPROVED") return res.status(400).json({ error: "Only approved templates can be enabled" });
+  const enabled = req.body.enabled ? 1 : 0;
+  templateQ.setEnabled.run(enabled, req.params.id);
+  res.json({ ok: true, enabled });
+});
+
 // Delete template (removes from Meta + local DB)
 router.delete("/:id", requireAdmin, async (req, res) => {
   const template = templateQ.byId.get(req.params.id);
