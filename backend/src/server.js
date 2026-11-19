@@ -13,6 +13,7 @@ const contactsRouter = require("./routes/contacts");
 const conversationsRouter = require("./routes/conversations");
 const templatesRouter = require("./routes/templates");
 const automationRouter = require("./routes/automation");
+const campaignsRouter = require("./routes/campaigns");
 const { getMediaInfo, downloadMedia } = require("./whatsapp");
 const axios = require("axios");
 const { startJobs } = require("./jobs");
@@ -67,6 +68,7 @@ app.use("/api/contacts",  contactsRouter);
 app.use("/api/conversations", conversationsRouter);
 app.use("/api/templates", templatesRouter);
 app.use("/api/automation",automationRouter);
+app.use("/api/campaigns", campaignsRouter);
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 // Account info — active WhatsApp number + webhook config

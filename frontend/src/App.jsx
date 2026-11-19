@@ -9,6 +9,7 @@ import Templates from "./pages/Templates";
 import Automation from "./pages/Automation";
 import Settings from "./pages/Settings";
 import Leads from "./pages/Leads";
+import Campaigns from "./pages/Campaigns";
 
 function PrivateRoute({ children }) {
   const { agent, loading } = useAuth();
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/" element={<PrivateRoute><Inbox /></PrivateRoute>} />
           <Route path="/contacts" element={<PrivateRoute><Contacts /></PrivateRoute>} />
           <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+          <Route path="/campaigns" element={<PrivateRoute><Campaigns /></PrivateRoute>} />
           <Route path="/templates" element={<PrivateRoute><Templates /></PrivateRoute>} />
           <Route path="/automation" element={<PrivateRoute><Automation /></PrivateRoute>} />
           <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />

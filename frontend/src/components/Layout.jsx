@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { MessageSquare, Users, Zap, FileText, Settings, LogOut, Bot, TrendingUp, Sun, Moon } from "lucide-react";
+import { MessageSquare, Users, Zap, FileText, Settings, LogOut, Bot, TrendingUp, Sun, Moon, Megaphone } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { useTheme } from "../hooks/useTheme";
 import { Avatar } from "./ui/avatar";
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/", icon: MessageSquare, label: "Inbox" },
   { to: "/contacts", icon: Users, label: "Contacts" },
   { to: "/leads", icon: TrendingUp, label: "Leads" },
+  { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { to: "/templates", icon: FileText, label: "Templates" },
   { to: "/automation", icon: Zap, label: "Automation" },
   { to: "/settings", icon: Settings, label: "Settings" },

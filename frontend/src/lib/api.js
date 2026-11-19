@@ -68,6 +68,15 @@ export const getSequences = () => api.get("/api/automation/sequences").then((r) 
 export const createSequence = (data) => api.post("/api/automation/sequences", data).then((r) => r.data);
 export const enrollInSequence = (seqId, contact_wa_id) => api.post(`/api/automation/sequences/${seqId}/enroll`, { contact_wa_id }).then((r) => r.data);
 
+// Campaigns
+export const getCampaigns = () => api.get("/api/campaigns").then((r) => r.data);
+export const getCampaign = (id) => api.get(`/api/campaigns/${id}`).then((r) => r.data);
+export const createCampaign = (data) => api.post("/api/campaigns", data).then((r) => r.data);
+export const updateCampaign = (id, data) => api.patch(`/api/campaigns/${id}`, data).then((r) => r.data);
+export const deleteCampaign = (id) => api.delete(`/api/campaigns/${id}`).then((r) => r.data);
+export const launchCampaign = (id) => api.post(`/api/campaigns/${id}/launch`).then((r) => r.data);
+export const previewAudience = (data) => api.post("/api/campaigns/preview-audience", data).then((r) => r.data);
+
 // Agents
 export const getAgents = () => api.get("/api/agents").then((r) => r.data);
 export const createAgent = (data) => api.post("/api/agents", data).then((r) => r.data);

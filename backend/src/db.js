@@ -100,6 +100,36 @@ db.exec(`
     created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
   );
 
+  -- Campaigns
+  CREATE TABLE IF NOT EXISTS campaigns (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','running','completed','failed')),
+    template_name  TEXT NOT NULL,
+    language       TEXT NOT NULL DEFAULT 'en_US',
+    components     TEXT NOT NULL DEFAULT '[]',
+    audience_type  TEXT NOT NULL DEFAULT 'all' CHECK(audience_type IN ('all','tag','custom')),
+    audience_value TEXT,
+    total          INTEGER NOT NULL DEFAULT 0,
+    sent           INTEGER NOT NULL DEFAULT 0,
+    failed         INTEGER NOT NULL DEFAULT 0,
+    started_at     INTEGER,
+    completed_at   INTEGER,
+    created_by     INTEGER REFERENCES agents(id),
+    created_at     INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+  );
+
+  CREATE TABLE IF NOT EXISTS campaign_recipients (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    wa_id        TEXT NOT NULL,
+    contact_name TEXT,
+    status       TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+    sent_at      INTEGER,
+    error        TEXT,
+    UNIQUE(campaign_id, wa_id)
+  );
+
   -- Automation rules
   CREATE TABLE IF NOT EXISTS automation_rules (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -319,4 +349,23 @@ const dripQ = {
   advanceStep:    db.prepare("UPDATE contact_sequences SET current_step=@step,next_send_at=@next,completed=@done WHERE id=@id"),
 };
 
-module.exports = { db, agentQ, contactQ, tagQ, convQ, msgQ, cannedQ, templateQ, autoQ, dripQ };
+// Campaigns
+const campaignQ = {
+  list:            db.prepare(`SELECT c.*, a.name as creator_name FROM campaigns c LEFT JOIN agents a ON a.id=c.created_by ORDER BY c.created_at DESC`),
+  byId:            db.prepare(`SELECT c.*, a.name as creator_name FROM campaigns c LEFT JOIN agents a ON a.id=c.created_by WHERE c.id=?`),
+  insert:          db.prepare(`INSERT INTO campaigns (name,template_name,language,components,audience_type,audience_value,created_by) VALUES (@name,@template_name,@language,@components,@audience_type,@audience_value,@created_by)`),
+  update:          db.prepare(`UPDATE campaigns SET name=@name,template_name=@template_name,language=@language,components=@components,audience_type=@audience_type,audience_value=@audience_value WHERE id=@id AND status='draft'`),
+  delete:          db.prepare(`DELETE FROM campaigns WHERE id=? AND status!='running'`),
+  setRunning:      db.prepare(`UPDATE campaigns SET status='running',started_at=@started_at,total=@total WHERE id=@id`),
+  setCompleted:    db.prepare(`UPDATE campaigns SET status='completed',completed_at=? WHERE id=?`),
+  setFailed:       db.prepare(`UPDATE campaigns SET status='failed',completed_at=? WHERE id=?`),
+  incrSent:        db.prepare(`UPDATE campaigns SET sent=sent+1 WHERE id=?`),
+  incrFailed:      db.prepare(`UPDATE campaigns SET failed=failed+1 WHERE id=?`),
+  recipients:      db.prepare(`SELECT * FROM campaign_recipients WHERE campaign_id=? ORDER BY id ASC`),
+  addRecipient:    db.prepare(`INSERT OR IGNORE INTO campaign_recipients (campaign_id,wa_id,contact_name) VALUES (@campaign_id,@wa_id,@contact_name)`),
+  updateRecipient: db.prepare(`UPDATE campaign_recipients SET status=@status,sent_at=@sent_at,error=@error WHERE campaign_id=@campaign_id AND wa_id=@wa_id`),
+  contactsByTag:   db.prepare(`SELECT c.* FROM contacts c JOIN contact_tags ct ON ct.contact_wa_id=c.wa_id JOIN tags t ON t.id=ct.tag_id WHERE t.name=? AND c.opted_in=1`),
+  optedInAll:      db.prepare(`SELECT * FROM contacts WHERE opted_in=1`),
+};
+
+module.exports = { db, agentQ, contactQ, tagQ, convQ, msgQ, cannedQ, templateQ, autoQ, dripQ, campaignQ };
