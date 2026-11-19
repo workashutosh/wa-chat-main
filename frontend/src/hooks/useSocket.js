@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Empty string in production → connect to same origin (nginx proxies /socket.io → port 3002)
+const SOCKET_URL = import.meta.env.VITE_API_URL || undefined;
 
 export function useSocket(onMessage, onStatus, onConvUpdate) {
   const onMessageRef = useRef(onMessage);

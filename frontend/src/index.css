@@ -20,6 +20,22 @@
     --radius: 0.5rem;
   }
 
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 95%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 142 76% 36%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 355 100% 100%;
+    --secondary: 217 33% 14%;
+    --secondary-foreground: 210 40% 95%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 58%;
+    --accent: 217 33% 14%;
+    --accent-foreground: 210 40% 95%;
+  }
+
   * {
     @apply border-border;
   }

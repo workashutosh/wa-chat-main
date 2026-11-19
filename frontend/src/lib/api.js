@@ -29,6 +29,8 @@ export const addNote = (id, text) => api.post(`/api/conversations/${id}/note`, {
 export const assignConversation = (id, agent_id) => api.post(`/api/conversations/${id}/assign`, { agent_id }).then((r) => r.data);
 export const claimConversation = (id) => api.post(`/api/conversations/${id}/claim`).then((r) => r.data);
 export const setConversationStatus = (id, status) => api.post(`/api/conversations/${id}/status`, { status }).then((r) => r.data);
+export const setLeadStatus = (id, lead_status) => api.patch(`/api/conversations/${id}/lead-status`, { lead_status }).then((r) => r.data);
+export const setConversationLabel = (id, label) => api.patch(`/api/conversations/${id}/label`, { label }).then((r) => r.data);
 
 // Canned responses
 export const getCannedResponses = () => api.get("/api/conversations/canned/all").then((r) => r.data);
@@ -40,11 +42,15 @@ export const deleteCannedResponse = (id) => api.delete(`/api/conversations/canne
 export const getContacts = () => api.get("/api/contacts").then((r) => r.data);
 export const getContact = (waId) => api.get(`/api/contacts/${waId}`).then((r) => r.data);
 export const updateContact = (waId, data) => api.put(`/api/contacts/${waId}`, data).then((r) => r.data);
+export const createContact = (data) => api.post("/api/contacts", data).then((r) => r.data);
 export const deleteContact = (waId) => api.delete(`/api/contacts/${waId}`).then((r) => r.data);
+export const bulkDeleteContacts = (wa_ids) => api.post("/api/contacts/bulk-delete", { wa_ids }).then((r) => r.data);
+export const broadcastTemplate = (wa_ids, template_name, language, components) => api.post("/api/contacts/broadcast", { wa_ids, template_name, language, components }).then((r) => r.data);
 export const importContacts = (file) => { const fd = new FormData(); fd.append("file", file); return api.post("/api/contacts/import", fd).then((r) => r.data); };
-export const exportContactsCsv = () => window.open((import.meta.env.VITE_API_URL || "http://localhost:3001") + "/api/contacts/export/csv");
+export const exportContactsCsv = () => window.open((import.meta.env.VITE_API_URL ?? "") + "/api/contacts/export/csv");
 export const getTags = () => api.get("/api/contacts/tags/all").then((r) => r.data);
 export const createTag = (name, color) => api.post("/api/contacts/tags/all", { name, color }).then((r) => r.data);
+export const deleteTag = (id) => api.delete(`/api/contacts/tags/${id}`).then((r) => r.data);
 
 // Templates
 export const getTemplates = () => api.get("/api/templates").then((r) => r.data);

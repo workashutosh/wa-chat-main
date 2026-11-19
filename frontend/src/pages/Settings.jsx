@@ -146,7 +146,7 @@ function AgentForm({ initial, onSave, onCancel, isEdit }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* 2-col grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium text-foreground block mb-1.5">Name <span className="text-red-500">*</span></label>
           <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="John Doe" />
@@ -540,6 +540,7 @@ export default function Settings() {
         open={showAgentForm}
         onClose={() => setShowAgentForm(false)}
         title={editingAgent ? `Edit ${editingAgent.name}` : "Add team member"}
+        className="max-w-2xl"
       >
         {showAgentForm && (
           <AgentForm

@@ -1,6 +1,17 @@
 const cron = require("node-cron");
-const { dripQ, convQ, msgQ, contactQ } = require("./db");
+const { dripQ, convQ, msgQ, contactQ, db } = require("./db");
 const { sendText } = require("./whatsapp");
+
+// Prepared statement for polling new inbound messages
+const pollInbound = db.prepare(`
+  SELECT m.*, cv.contact_wa_id, c.name as contact_name
+  FROM messages m
+  JOIN conversations cv ON cv.id = m.conversation_id
+  JOIN contacts c ON c.wa_id = cv.contact_wa_id
+  WHERE m.direction = 'inbound' AND m.id > ?
+  ORDER BY m.id ASC
+  LIMIT 50
+`);
 
 // Runs every minute — processes due drip sequence steps
 function startJobs(io) {
@@ -33,6 +44,29 @@ function startJobs(io) {
       }
     }
   });
+
+  // Poll for new inbound messages every 3 seconds and emit via socket.
+  // This bridges the gap between wa-webhook (port 3001) writing to SQLite
+  // and wa-chat-app (port 3002) needing to push real-time events to browsers.
+  let lastSeenId = (() => {
+    const row = db.prepare("SELECT MAX(id) as max_id FROM messages WHERE direction='inbound'").get();
+    return row?.max_id ?? 0;
+  })();
+
+  setInterval(() => {
+    try {
+      const newMsgs = pollInbound.all(lastSeenId);
+      for (const msg of newMsgs) {
+        const { contact_wa_id, contact_name, ...message } = msg;
+        io?.emit("new_message", { conversation_id: msg.conversation_id, contact_wa_id, contact_name, message });
+        // Also update unread count in memory via socket
+        io?.emit("conversation_updated", { id: msg.conversation_id });
+        if (msg.id > lastSeenId) lastSeenId = msg.id;
+      }
+    } catch (err) {
+      console.error("[poll-inbound]", err.message);
+    }
+  }, 3000);
 
   console.log("[jobs] Drip cron started");
 }

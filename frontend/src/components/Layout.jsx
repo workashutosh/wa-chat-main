@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { MessageSquare, Users, Zap, FileText, Settings, LogOut, Bot } from "lucide-react";
+import { MessageSquare, Users, Zap, FileText, Settings, LogOut, Bot, TrendingUp, Sun, Moon } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.jsx";
+import { useTheme } from "../hooks/useTheme";
 import { Avatar } from "./ui/avatar";
 import { cn } from "../lib/utils";
 
 const NAV = [
   { to: "/", icon: MessageSquare, label: "Inbox" },
   { to: "/contacts", icon: Users, label: "Contacts" },
+  { to: "/leads", icon: TrendingUp, label: "Leads" },
   { to: "/templates", icon: FileText, label: "Templates" },
   { to: "/automation", icon: Zap, label: "Automation" },
   { to: "/settings", icon: Settings, label: "Settings" },
@@ -15,6 +17,7 @@ const NAV = [
 export function Layout({ children }) {
   const { agent, logout } = useAuth();
   const navigate = useNavigate();
+  const { theme, toggle } = useTheme();
 
   function handleLogout() { logout(); navigate("/login"); }
 
@@ -38,6 +41,9 @@ export function Layout({ children }) {
           ))}
         </div>
         <div className="mt-auto flex flex-col items-center gap-2">
+          <button onClick={toggle} className="text-slate-400 hover:text-white" title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <Avatar name={agent?.name ?? ""} className="w-8 h-8 text-xs cursor-pointer" />
           <button onClick={handleLogout} className="text-slate-400 hover:text-white" title="Logout">
             <LogOut className="w-4 h-4" />

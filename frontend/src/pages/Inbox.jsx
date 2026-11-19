@@ -11,6 +11,7 @@ import { Textarea } from "../components/ui/textarea";
 import { MessageBubble } from "../components/MessageBubble";
 import { SendBar } from "../components/SendBar";
 import { useSocket } from "../hooks/useSocket";
+import { useNotifications } from "../hooks/useNotifications";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { cn, formatTime } from "../lib/utils";
 import {
@@ -21,6 +22,7 @@ import {
 
 export default function Inbox() {
   const { agent } = useAuth();
+  const notify = useNotifications();
 
   const canViewAll = agent?.role === "admin" || agent?.agent_type === "manager";
 
@@ -38,6 +40,7 @@ export default function Inbox() {
   const [replyTo, setReplyTo] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [templateVarValues, setTemplateVarValues] = useState({});
   const [newChat, setNewChat] = useState({ phone: "", name: "", message: "", template_name: "", language: "en_US", mode: "text" });
   const bottomRef = useRef(null);
   const sentWamids = useRef(new Set());
@@ -58,9 +61,24 @@ export default function Inbox() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Update browser tab title with total unread count
+  useEffect(() => {
+    const total = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+    document.title = total > 0 ? `(${total}) Inbox — WA Chat` : "Inbox — WA Chat";
+    return () => { document.title = "WA Chat"; };
+  }, [conversations]);
+
   // ── Socket ────────────────────────────────────────────────────────────────────
   useSocket(
     ({ conversation_id, contact_wa_id, contact_name, message }) => {
+      // Notify on inbound messages only
+      if (message.direction === "inbound" && message.is_note !== 1) {
+        notify({
+          title: contact_name ?? contact_wa_id ?? "New message",
+          body: message.body?.slice(0, 100) ?? "New WhatsApp message",
+        });
+      }
+
       setConversations((prev) => {
         const existing = prev.find((c) => c.id === conversation_id);
         if (existing) {
@@ -104,7 +122,12 @@ export default function Inbox() {
     try {
       const msg = await sendMessage(active.id, text, replyWamid);
       if (msg?.wamid) sentWamids.current.add(msg.wamid);
-      setMessages((p) => p.map((m) => m.id === opt.id ? { ...m, ...msg } : m));
+      setMessages((p) => {
+        // Replace optimistic, then deduplicate in case socket already added the real message
+        const replaced = p.map((m) => m.id === opt.id ? { ...m, ...msg } : m);
+        const seen = new Set();
+        return replaced.filter((m) => { const k = m.wamid; if (!k || !seen.has(k)) { if (k) seen.add(k); return true; } return false; });
+      });
     } catch (err) {
       toast.error(err.response?.data?.error ?? "Send failed");
       setMessages((p) => p.filter((m) => m.id !== opt.id));
@@ -119,7 +142,11 @@ export default function Inbox() {
     try {
       const msg = await sendImage(active.id, file, caption);
       if (msg?.wamid) sentWamids.current.add(msg.wamid);
-      setMessages((p) => p.map((m) => m.id === opt.id ? { ...m, ...msg } : m));
+      setMessages((p) => {
+        const replaced = p.map((m) => m.id === opt.id ? { ...m, ...msg } : m);
+        const seen = new Set();
+        return replaced.filter((m) => { const k = m.wamid; if (!k || !seen.has(k)) { if (k) seen.add(k); return true; } return false; });
+      });
       URL.revokeObjectURL(preview);
     } catch (err) {
       toast.error(err.response?.data?.error ?? "Image send failed");
@@ -173,14 +200,42 @@ export default function Inbox() {
     } catch (err) { toast.error(err.response?.data?.error ?? "Failed to start chat"); }
   }
 
+  function getTemplateVars(template) {
+    if (!template) return [];
+    const comps = typeof template.components === "string" ? JSON.parse(template.components) : (template.components ?? []);
+    const body = comps.find(c => c.type === "BODY");
+    if (!body?.text) return [];
+    const matches = [...body.text.matchAll(/\{\{(\d+)\}\}/g)];
+    const nums = [...new Set(matches.map(m => parseInt(m[1])))].sort((a, b) => a - b);
+    return nums;
+  }
+
   async function handleSendTemplate() {
     if (!selectedTemplate) return;
+    const vars = getTemplateVars(selectedTemplate);
+    // Check all required vars are filled
+    for (const n of vars) {
+      if (!templateVarValues[n]?.trim()) return toast.error(`Fill in variable {{${n}}}`);
+    }
+    // Build components array
+    const components = [];
+    if (vars.length > 0) {
+      components.push({
+        type: "body",
+        parameters: vars.map(n => ({ type: "text", text: templateVarValues[n].trim() })),
+      });
+    }
     try {
-      await apiSendTemplate(active.id, { template_name: selectedTemplate.name, language: selectedTemplate.language, components: [] });
+      await apiSendTemplate(active.id, { template_name: selectedTemplate.name, language: selectedTemplate.language, components });
       toast.success("Template sent");
       setShowTemplate(false);
+      setSelectedTemplate(null);
+      setTemplateVarValues({});
       getMessages(active.id).then(setMessages);
-    } catch (err) { toast.error(err.response?.data?.error ?? "Failed"); }
+    } catch (err) {
+      const e = err.response?.data;
+      toast.error(e?.error ?? err.message ?? "Failed", { duration: 6000 });
+    }
   }
 
   const filtered = conversations.filter((c) => {
@@ -271,7 +326,7 @@ export default function Inbox() {
                         <UserCheck className="w-3 h-3 text-emerald-500" />{conv.agent_name}
                       </span>
                     ) : (
-                      <span className="text-[11px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">Unassigned</span>
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded font-medium">Unassigned</span>
                     )}
                     {/* Claim button — only in unassigned view, only for non-admin roles that don't have it assigned */}
                     {view === "unassigned" && isUnassigned(conv) && (
@@ -313,7 +368,7 @@ export default function Inbox() {
 
             {/* Claim button if unassigned and agent can claim */}
             {!active.assigned_to && (
-              <Button size="sm" variant="outline" className="text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => handleClaim(active.id)}>
+              <Button size="sm" variant="outline" className="text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40" onClick={() => handleClaim(active.id)}>
                 <UserCheck className="w-3.5 h-3.5" />Claim
               </Button>
             )}
@@ -418,17 +473,133 @@ export default function Inbox() {
       </Dialog>
 
       {/* ── Template dialog ───────────────────────────────────────────────────── */}
-      <Dialog open={showTemplate} onClose={() => setShowTemplate(false)} title="Send template">
-        <div className="space-y-3">
-          {templates.filter((t) => t.status === "APPROVED" && t.enabled).length === 0 && <p className="text-sm text-muted-foreground">No enabled templates. Admin must enable templates from the Templates page.</p>}
-          {templates.filter((t) => t.status === "APPROVED" && t.enabled).map((t) => (
-            <button key={t.id} onClick={() => setSelectedTemplate(t)} className={cn("w-full text-left px-3 py-2.5 rounded-lg border transition-colors", selectedTemplate?.id === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted")}>
-              <p className="font-medium text-sm">{t.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t.language} · {t.category}</p>
-            </button>
-          ))}
-          {selectedTemplate && <Button className="w-full mt-2" onClick={handleSendTemplate}>Send "{selectedTemplate.name}"</Button>}
-        </div>
+      <Dialog open={showTemplate} onClose={() => { setShowTemplate(false); setSelectedTemplate(null); setTemplateVarValues({}); }} title="Send template" className="max-w-2xl">
+        {(() => {
+          const approvedTemplates = templates.filter(t => t.status === "APPROVED" && t.enabled);
+          const vars = getTemplateVars(selectedTemplate);
+          const bodyComp = selectedTemplate ? (() => {
+            const comps = typeof selectedTemplate.components === "string" ? JSON.parse(selectedTemplate.components) : (selectedTemplate.components ?? []);
+            return comps.find(c => c.type === "BODY");
+          })() : null;
+          const headerComp = selectedTemplate ? (() => {
+            const comps = typeof selectedTemplate.components === "string" ? JSON.parse(selectedTemplate.components) : (selectedTemplate.components ?? []);
+            return comps.find(c => c.type === "HEADER");
+          })() : null;
+          const footerComp = selectedTemplate ? (() => {
+            const comps = typeof selectedTemplate.components === "string" ? JSON.parse(selectedTemplate.components) : (selectedTemplate.components ?? []);
+            return comps.find(c => c.type === "FOOTER");
+          })() : null;
+          const buttonComps = selectedTemplate ? (() => {
+            const comps = typeof selectedTemplate.components === "string" ? JSON.parse(selectedTemplate.components) : (selectedTemplate.components ?? []);
+            return comps.find(c => c.type === "BUTTONS");
+          })() : null;
+
+          // Build live preview text by replacing {{n}} with typed value or placeholder
+          const previewBody = bodyComp?.text?.replace(/\{\{(\d+)\}\}/g, (_, n) => {
+            const val = templateVarValues[parseInt(n)];
+            return val?.trim() ? val.trim() : `{{${n}}}`;
+          }) ?? "";
+
+          return (
+            <div className="flex gap-0 -mx-6 -mb-6 mt-1 overflow-hidden rounded-b-xl" style={{ minHeight: 340 }}>
+              {/* Left — template list */}
+              <div className="w-56 shrink-0 border-r border-border flex flex-col">
+                <p className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">Templates</p>
+                <div className="flex-1 overflow-y-auto py-1">
+                  {approvedTemplates.length === 0 && (
+                    <p className="px-3 py-4 text-xs text-muted-foreground">No enabled templates. Admin must enable them in the Templates page.</p>
+                  )}
+                  {approvedTemplates.map(t => (
+                    <button key={t.id} onClick={() => { setSelectedTemplate(t); setTemplateVarValues({}); }}
+                      className={cn("w-full text-left px-3 py-2.5 transition-colors border-l-2",
+                        selectedTemplate?.id === t.id
+                          ? "border-l-primary bg-primary/5 text-primary"
+                          : "border-l-transparent hover:bg-muted text-foreground")}>
+                      <p className="font-medium text-sm truncate">{t.name}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{t.language} · {t.category}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right — preview + variables */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {!selectedTemplate ? (
+                  <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                    Select a template to preview
+                  </div>
+                ) : (
+                  <>
+                    {/* Live preview */}
+                    <div className="flex-1 overflow-y-auto px-5 py-4 bg-[#e5ddd5] dark:bg-[#1a1a2e]">
+                      <p className="text-[10px] text-center text-muted-foreground mb-3 font-medium">PREVIEW</p>
+                      <div className="max-w-xs ml-auto">
+                        <div className="bg-white dark:bg-[#202c33] rounded-xl rounded-tr-sm shadow-sm overflow-hidden">
+                          {headerComp?.text && (
+                            <div className="px-3 pt-2.5 pb-1">
+                              <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{headerComp.text}</p>
+                            </div>
+                          )}
+                          {previewBody && (
+                            <div className="px-3 py-2">
+                              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                                {previewBody.split(/(\{\{\d+\}\})/g).map((part, i) =>
+                                  /^\{\{\d+\}\}$/.test(part)
+                                    ? <span key={i} className="bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-0.5 rounded">{part}</span>
+                                    : part
+                                )}
+                              </p>
+                            </div>
+                          )}
+                          {footerComp?.text && (
+                            <div className="px-3 pb-2">
+                              <p className="text-[11px] text-gray-400">{footerComp.text}</p>
+                            </div>
+                          )}
+                          <div className="px-3 pb-1.5 flex justify-end">
+                            <span className="text-[10px] text-gray-400">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        </div>
+                        {buttonComps?.buttons?.map((btn, i) => (
+                          <div key={i} className="mt-1 bg-white dark:bg-[#202c33] rounded-lg shadow-sm py-2 px-3 text-center">
+                            <span className="text-xs font-medium text-blue-500">{btn.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Variables + send */}
+                    <div className="border-t border-border px-5 py-4 space-y-3 bg-background">
+                      {vars.length > 0 ? (
+                        <>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Fill in variables</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {vars.map(n => (
+                              <div key={n}>
+                                <label className="text-[11px] font-medium text-muted-foreground block mb-0.5">{`{{${n}}}`}</label>
+                                <input
+                                  value={templateVarValues[n] ?? ""}
+                                  onChange={e => setTemplateVarValues(p => ({ ...p, [n]: e.target.value }))}
+                                  placeholder={`Value for {{${n}}}…`}
+                                  className="w-full border border-border rounded-lg px-2.5 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No variables — ready to send.</p>
+                      )}
+                      <Button className="w-full" onClick={handleSendTemplate}>
+                        Send &ldquo;{selectedTemplate.name}&rdquo;
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </Dialog>
     </div>
   );

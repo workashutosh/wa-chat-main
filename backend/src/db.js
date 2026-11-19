@@ -152,12 +152,23 @@ if (!adminExists) {
 }
 
 // ── Migrations (run before preparing statements) ──────────────────────────────
+try { db.exec("ALTER TABLE contacts ADD COLUMN phone TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN email TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN opted_in INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN blacklisted INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN notes TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN custom_fields TEXT DEFAULT '{}'"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)"); } catch (_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN reply_to_wamid TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE messages ADD COLUMN media_url TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN phone TEXT"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'agent'"); } catch (_) {}
 try { db.exec("ALTER TABLE agents ADD COLUMN permissions TEXT DEFAULT '{}'"); } catch (_) {}
 try { db.exec("ALTER TABLE templates ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
+try { db.exec("ALTER TABLE conversations ADD COLUMN lead_status TEXT DEFAULT 'new_lead'"); } catch (_) {}
+try { db.exec("ALTER TABLE conversations ADD COLUMN label TEXT"); } catch (_) {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN source TEXT DEFAULT 'whatsapp'"); } catch (_) {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -199,6 +210,7 @@ const tagQ = {
   addToContact:  db.prepare("INSERT OR IGNORE INTO contact_tags (contact_wa_id,tag_id) VALUES (?,?)"),
   removeFromContact: db.prepare("DELETE FROM contact_tags WHERE contact_wa_id=? AND tag_id=?"),
   clearContact:  db.prepare("DELETE FROM contact_tags WHERE contact_wa_id=?"),
+  delete:        db.prepare("DELETE FROM tags WHERE id=?"),
 };
 
 // Conversations
@@ -213,12 +225,13 @@ function getOrCreateConv(wa_id) {
 }
 
 const convQ = {
-  getOrCreate: getOrCreateConv,   // now a function, not a prepared statement
+  getOrCreate: getOrCreateConv,
   byContact: _convByContact,
   list: db.prepare(`
-    SELECT cv.*, c.name as contact_name, c.phone, c.opted_in, c.blacklisted,
+    SELECT cv.*, c.name as contact_name, c.phone, c.opted_in, c.blacklisted, c.source as contact_source,
            a.name as agent_name,
-           m.body as last_message, m.direction as last_direction
+           m.body as last_message, m.direction as last_direction,
+           (SELECT COUNT(*) FROM messages WHERE conversation_id=cv.id AND is_note=1) as notes_count
     FROM conversations cv
     JOIN contacts c ON c.wa_id = cv.contact_wa_id
     LEFT JOIN agents a ON a.id = cv.assigned_to
@@ -238,12 +251,14 @@ const convQ = {
     WHERE cv.assigned_to=?
     ORDER BY cv.last_message_at DESC
   `),
-  byId:        db.prepare("SELECT * FROM conversations WHERE id=?"),
-  assign:      db.prepare("UPDATE conversations SET assigned_to=? WHERE id=?"),
-  setStatus:   db.prepare("UPDATE conversations SET status=? WHERE id=?"),
-  touch:       db.prepare("UPDATE conversations SET last_message_at=? WHERE id=?"),
-  incrUnread:  db.prepare("UPDATE conversations SET unread_count=unread_count+1 WHERE id=?"),
-  clearUnread: db.prepare("UPDATE conversations SET unread_count=0 WHERE id=?"),
+  byId:          db.prepare("SELECT * FROM conversations WHERE id=?"),
+  assign:        db.prepare("UPDATE conversations SET assigned_to=? WHERE id=?"),
+  setStatus:     db.prepare("UPDATE conversations SET status=? WHERE id=?"),
+  setLeadStatus: db.prepare("UPDATE conversations SET lead_status=? WHERE id=?"),
+  setLabel:      db.prepare("UPDATE conversations SET label=? WHERE id=?"),
+  touch:         db.prepare("UPDATE conversations SET last_message_at=? WHERE id=?"),
+  incrUnread:    db.prepare("UPDATE conversations SET unread_count=unread_count+1 WHERE id=?"),
+  clearUnread:   db.prepare("UPDATE conversations SET unread_count=0 WHERE id=?"),
 };
 
 // Messages

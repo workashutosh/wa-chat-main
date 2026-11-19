@@ -2,7 +2,7 @@ const router = require("express").Router();
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const { convQ, msgQ, contactQ, cannedQ, tagQ } = require("../db");
+const { convQ, msgQ, contactQ, cannedQ, tagQ, templateQ } = require("../db");
 const { sendText, sendTemplate, uploadMedia, sendImage, markAsRead } = require("../whatsapp");
 const { requireAuth } = require("../middleware/auth");
 
@@ -146,11 +146,40 @@ router.post("/:id/send-template", async (req, res) => {
   const conv = convQ.byId.get(req.params.id);
   if (!conv) return res.status(404).json({ error: "Not found" });
 
+  // Build rendered body from stored template + sent parameter values
+  function renderTemplateBody(tplName, sentComponents) {
+    const tpl = templateQ.list.all().find(t => t.name === tplName);
+    if (!tpl) return null;
+    const comps = JSON.parse(tpl.components ?? "[]");
+    const bodyComp = comps.find(c => c.type === "BODY");
+    if (!bodyComp?.text) return null;
+    const params = sentComponents.find(c => c.type === "body")?.parameters ?? [];
+    return bodyComp.text.replace(/\{\{(\d+)\}\}/g, (_, n) => params[parseInt(n) - 1]?.text ?? `{{${n}}}`);
+  }
+
+  // Validate template exists and is APPROVED
+  const tplRecord = templateQ.list.all().find(t => t.name === template_name);
+  if (!tplRecord) return res.status(400).json({ error: `Template "${template_name}" not found in local DB. Try syncing templates.` });
+  if (tplRecord.status !== "APPROVED") return res.status(400).json({ error: `Template "${template_name}" is ${tplRecord.status}, not APPROVED. Wait for Meta to approve it.` });
+
+  // Strip non-digits from phone number (defensive)
+  const toPhone = String(conv.contact_wa_id).replace(/\D/g, "");
+
+  console.log(`[send-template] to=${toPhone} name=${template_name} lang=${language} components=${JSON.stringify(components)}`);
+
   try {
-    const result = await sendTemplate(conv.contact_wa_id, template_name, language, components);
-    const wamid = result.messages?.[0]?.id ?? `local_${Date.now()}`;
+    const result = await sendTemplate(toPhone, template_name, language, components);
+    console.log(`[send-template] Meta response:`, JSON.stringify(result));
+
+    const wamid = result.messages?.[0]?.id;
+    if (!wamid) {
+      console.error("[send-template] No wamid in Meta response:", JSON.stringify(result));
+      return res.status(500).json({ error: "Meta did not return a message ID. Template may not have been delivered." });
+    }
+
     const ts = Date.now();
-    const body = `[Template: ${template_name}]`;
+    const rendered = renderTemplateBody(template_name, components);
+    const body = rendered ?? `[Template: ${template_name}]`;
 
     const info = msgQ.insert.run({ wamid, conversation_id: conv.id, direction: "outbound", type: "template", body, status: "sent", is_note: 0, sender_id: req.agent.id, timestamp: ts, reply_to_wamid: null, media_url: null });
     convQ.touch.run(ts, conv.id);
@@ -160,7 +189,10 @@ router.post("/:id/send-template", async (req, res) => {
 
     res.json(message);
   } catch (err) {
-    res.status(500).json({ error: err.response?.data?.error?.message ?? "Send failed" });
+    const metaErr = err.response?.data?.error;
+    console.error("[send-template] Meta error:", JSON.stringify(metaErr ?? err.message));
+    const msg = metaErr?.error_user_msg ?? metaErr?.message ?? err.message ?? "Send failed";
+    res.status(500).json({ error: msg, code: metaErr?.code });
   }
 });
 
@@ -231,6 +263,23 @@ router.post("/:id/claim", (req, res) => {
   convQ.assign.run(req.agent.id, req.params.id);
   req.app.get("io")?.emit("conversation_updated", { id: parseInt(req.params.id), assigned_to: req.agent.id, agent_name: req.agent.name });
   res.json({ ok: true, assigned_to: req.agent.id, agent_name: req.agent.name });
+});
+
+// ── Lead status ───────────────────────────────────────────────────────────────
+router.patch("/:id/lead-status", (req, res) => {
+  const { lead_status } = req.body;
+  const valid = ["new_lead", "working_on", "qualified", "converted", "closed"];
+  if (!valid.includes(lead_status)) return res.status(400).json({ error: "invalid lead_status" });
+  convQ.setLeadStatus.run(lead_status, req.params.id);
+  req.app.get("io")?.emit("conversation_updated", { id: parseInt(req.params.id), lead_status });
+  res.json({ ok: true });
+});
+
+// ── Conversation label ────────────────────────────────────────────────────────
+router.patch("/:id/label", (req, res) => {
+  const { label } = req.body;
+  convQ.setLabel.run(label ?? null, req.params.id);
+  res.json({ ok: true });
 });
 
 // ── Status ────────────────────────────────────────────────────────────────────

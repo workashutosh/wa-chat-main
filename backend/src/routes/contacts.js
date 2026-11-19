@@ -2,7 +2,8 @@ const router = require("express").Router();
 const multer = require("multer");
 const { parse } = require("csv-parse/sync");
 const XLSX = require("xlsx");
-const { contactQ, tagQ } = require("../db");
+const { db, contactQ, tagQ, convQ } = require("../db");
+const { sendTemplate } = require("../whatsapp");
 const { requireAuth } = require("../middleware/auth");
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -49,6 +50,17 @@ router.put("/:waId", (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Create ────────────────────────────────────────────────────────────────────
+router.post("/", (req, res) => {
+  const { name, phone, email } = req.body;
+  if (!phone) return res.status(400).json({ error: "phone required" });
+  const wa_id = String(phone).replace(/\D/g, "");
+  const contactName = name?.trim() || `+${wa_id}`;
+  contactQ.upsert.run({ wa_id, name: contactName, phone: wa_id });
+  if (email) db.prepare("UPDATE contacts SET email=? WHERE wa_id=?").run(email, wa_id);
+  res.json(contactQ.byId.get(wa_id));
+});
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 router.delete("/:waId", (req, res) => {
   contactQ.delete.run(req.params.waId);
@@ -68,6 +80,11 @@ router.post("/tags/all", (req, res) => {
   const { name, color = "#6366f1" } = req.body;
   tagQ.insert.run({ name, color });
   res.json(tagQ.list.all().find((t) => t.name === name));
+});
+
+router.delete("/tags/:id", (req, res) => {
+  tagQ.delete.run(req.params.id);
+  res.json({ ok: true });
 });
 
 // ── CSV / Excel import ────────────────────────────────────────────────────────
@@ -104,6 +121,33 @@ router.get("/export/csv", (req, res) => {
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename=contacts_${Date.now()}.csv`);
   res.send(header + rows.join("\n"));
+});
+
+// ── Bulk delete ───────────────────────────────────────────────────────────────
+router.post("/bulk-delete", (req, res) => {
+  const { wa_ids } = req.body;
+  if (!Array.isArray(wa_ids) || !wa_ids.length) return res.status(400).json({ error: "wa_ids required" });
+  const del = db.prepare("DELETE FROM contacts WHERE wa_id=?");
+  const run = db.transaction((ids) => ids.forEach((id) => del.run(id)));
+  run(wa_ids);
+  res.json({ deleted: wa_ids.length });
+});
+
+// ── Broadcast template to contacts ───────────────────────────────────────────
+router.post("/broadcast", async (req, res) => {
+  const { wa_ids, template_name, language = "en_US", components = [] } = req.body;
+  if (!Array.isArray(wa_ids) || !wa_ids.length) return res.status(400).json({ error: "wa_ids required" });
+  if (!template_name) return res.status(400).json({ error: "template_name required" });
+
+  let sent = 0, failed = 0;
+  for (const wa_id of wa_ids) {
+    try {
+      await sendTemplate(wa_id, template_name, language, components);
+      convQ.getOrCreate(wa_id);
+      sent++;
+    } catch (_) { failed++; }
+  }
+  res.json({ sent, failed, total: wa_ids.length });
 });
 
 function randomColor() {
